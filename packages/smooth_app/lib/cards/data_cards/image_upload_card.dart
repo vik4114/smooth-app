@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:openfoodfacts/openfoodfacts.dart';
 import 'package:smooth_app/data_models/product_image_data.dart';
 import 'package:smooth_app/helpers/picture_capture_helper.dart';
@@ -28,6 +31,47 @@ class _ImageUploadCardState extends State<ImageUploadCard> {
   ImageProvider? _imageProvider; // Normal size image to display in carousel
   ImageProvider?
       _imageFullProvider; // Full resolution image to display in image page
+  ConnectivityResult _connectionStatus = ConnectivityResult.none;
+  final Connectivity _connectivity = Connectivity();
+  late StreamSubscription<ConnectivityResult> _connectivitySubscription;
+  @override
+  void initState() {
+    super.initState();
+    initConnectivity();
+    _connectivitySubscription =
+        _connectivity.onConnectivityChanged.listen(_updateConnectionStatus);
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription.cancel();
+    super.dispose();
+  }
+
+  Future<void> initConnectivity() async {
+    late ConnectivityResult result;
+    // Platform messages may fail, so we use a try/catch PlatformException.
+    try {
+      result = await _connectivity.checkConnectivity();
+    } on PlatformException catch (e) {
+      return;
+    }
+
+    // If the widget was removed from the tree while the asynchronous platform
+    // message was in flight, we want to discard the reply rather than calling
+    // setState to update our non-existent appearance.
+    if (!mounted) {
+      return;
+    }
+
+    return _updateConnectionStatus(result);
+  }
+
+  Future<void> _updateConnectionStatus(ConnectivityResult result) async {
+    setState(() {
+      _connectionStatus = result;
+    });
+  }
 
   Future<void> _getImage() async {
     final File? croppedImageFile = await startImageCropping(context);
@@ -64,39 +108,49 @@ class _ImageUploadCardState extends State<ImageUploadCard> {
       _imageProvider = NetworkImage(widget.productImageData.imageUrl!);
     }
 
-    if (_imageProvider != null) {
-      return GestureDetector(
-        child: Center(
+    if (_connectionStatus != ConnectivityResult.none) {
+      if (_imageProvider != null) {
+        return GestureDetector(
+          child: Center(
             child:
-                Image(image: _imageProvider!, fit: BoxFit.cover, height: 1000)),
-        onTap: () {
-          // if _imageFullProvider is null, we are displaying a small network image in the carousel
-          // we need to load the full resolution image
+                Image(image: _imageProvider!, fit: BoxFit.cover, height: 1000),
+          ),
+          onTap: () {
+            // if _imageFullProvider is null, we are displaying a small network image in the carousel
+            // we need to load the full resolution image
 
-          if (_imageFullProvider == null) {
-            final String _imageFullUrl =
-                widget.productImageData.imageUrl!.replaceAll('.400.', '.full.');
-            _imageFullProvider = NetworkImage(_imageFullUrl);
-          }
+            if (_imageFullProvider == null) {
+              final String _imageFullUrl = widget.productImageData.imageUrl!
+                  .replaceAll('.400.', '.full.');
+              _imageFullProvider = NetworkImage(_imageFullUrl);
+            }
 
-          Navigator.push<Widget>(
-            context,
-            MaterialPageRoute<Widget>(
-              builder: (BuildContext context) => ProductImageGalleryView(
-                productImageData: widget.productImageData,
-                allProductImagesData: widget.allProductImagesData,
-                title: widget.productImageData.title,
+            Navigator.push<Widget>(
+              context,
+              MaterialPageRoute<Widget>(
+                builder: (BuildContext context) => ProductImageGalleryView(
+                  productImageData: widget.productImageData,
+                  allProductImagesData: widget.allProductImagesData,
+                  title: widget.productImageData.title,
+                ),
               ),
-            ),
-          );
-        },
-      );
+            );
+          },
+        );
+      } else {
+        return ElevatedButton.icon(
+          onPressed: _getImage,
+          icon: const Icon(Icons.add_a_photo),
+          label: Text(widget.productImageData.buttonText),
+        );
+      }
     } else {
-      return ElevatedButton.icon(
-        onPressed: _getImage,
-        icon: const Icon(Icons.add_a_photo),
-        label: Text(widget.productImageData.buttonText),
-      );
+      return const Center(
+          child: Image(
+              image: AssetImage(
+                  'assets/app/smoothie-icon-transparent.1200x1200.png'),
+              fit: BoxFit.cover,
+              height: 1000));
     }
   }
 }

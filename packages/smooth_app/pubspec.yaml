@@ -52,6 +52,7 @@ dependencies:
       ref: master
   image_cropper: ^2.0.0
   auto_size_text: ^3.0.0
+  connectivity_plus: ^2.3.0
 
 dev_dependencies:
   integration_test:
